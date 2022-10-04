@@ -1,4 +1,5 @@
 use chashmap::CHashMap;
+use chat::Error;
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -36,19 +37,19 @@ async fn main() {
                 let (message_tx, mut message_rx) = mpsc::unbounded_channel::<Message>();
                 let (mut user_ws_tx, mut user_ws_rx) = ws.split();
 
-                let token = chat::Token::new();
-
                 let user = chat::User {
                     message_chan: message_tx.clone(),
                 };
 
                 if let Some(user) = users.insert(username.clone(), user.clone()) {
+                    let _ = user_ws_tx
+                        .send(Error::new("Username taken").message())
+                        .await;
                     let _ = user_ws_tx.close().await;
                     users.insert(username.clone(), user);
                 }
 
                 let response_json = serde_json::to_string(&chat::LoginResponse {
-                    token: token.clone(),
                     username: username.clone(),
                 })
                 .unwrap();
@@ -60,7 +61,7 @@ async fn main() {
                         user_ws_tx
                             .send(msg)
                             .await
-                            .unwrap_or_else(|e| log::error!("WebSocket error: {}", e))
+                            .unwrap_or_else(|e| log::info!("WebSocket error: {}", e))
                     }
                 });
 
@@ -69,29 +70,27 @@ async fn main() {
                         Ok(msg) => {
                             match serde_json::from_slice::<chat::Message>(msg.as_bytes()) {
                                 Ok(mut msg) => {
-                                    if msg.token == token {
-                                        msg.username = username.clone();
-                                        // Need to re-serialize message because of token
-                                        message_all_users(
-                                            Message::text(serde_json::to_string(&msg).unwrap()),
-                                            &users,
-                                        )
-                                    } else {
-                                        let _ = message_tx.send(Message::text("Unauthorized"));
-                                    }
+                                    msg.username = username.clone();
+                                    // Need to re-serialize message because of token
+                                    message_all_users(
+                                        Message::text(serde_json::to_string(&msg).unwrap()),
+                                        &users,
+                                    )
                                 }
                                 Err(e) => {
-                                    let _ = message_tx
-                                        .send(Message::text(format!("Invalid json format: {}", e)));
+                                    let _ = message_tx.send(
+                                        Error::new(format!("Invalid json format: {}", e)).message(),
+                                    );
                                 }
                             }
                         }
-                        Err(e) => log::error!("WebSocket error: {}", e),
+                        Err(e) => log::info!("WebSocket error: {}", e),
                     }
                 }
 
                 users.remove(&username);
-            }).into_response()
+            })
+            .into_response()
         });
 
     warp::serve(warp::get().and(warp::fs::dir("ui/build/web").or(chatsock)))
