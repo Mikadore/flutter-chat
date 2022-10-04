@@ -88,7 +88,9 @@ class _ChatViewState extends State<ChatView> {
 
   @override
   Widget build(BuildContext ctx) {
-    return Expanded(child: Container(
+    return Scaffold( 
+      appBar: AppBar(title: const Text("Chatting as \$User")),
+      body: Column(children: [Expanded(child: Container(
         color: Theme.of(ctx).primaryColor,
         constraints: const BoxConstraints.expand(),
         child: Column(
@@ -103,7 +105,7 @@ class _ChatViewState extends State<ChatView> {
               decoration: const InputDecoration(
                 hintText: "Press enter to chat!",
                 hintStyle: TextStyle(color: Colors.white),
-                fillColor: Color(0xFF424549),
+                fillColor: Color(0xFF1F2124),
                 filled: true,
               ),
               onSubmitted: onMessage,
@@ -111,6 +113,6 @@ class _ChatViewState extends State<ChatView> {
               controller: _controller,
             )
           ],
-        )));
+    )))]));
   }
 }
